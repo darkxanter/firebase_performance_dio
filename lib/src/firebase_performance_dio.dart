@@ -32,7 +32,7 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
         options.method.asHttpMethod()!,
       );
 
-      final requestKey = options.extra.hashCode;
+      final requestKey = options.extra.toString().hashCode;
       _map[requestKey] = metric;
       final requestContentLength = requestContentLengthMethod(options);
       await metric.start();
@@ -47,7 +47,7 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
   Future onResponse(
       Response response, ResponseInterceptorHandler handler) async {
     try {
-      final requestKey = response.requestOptions.extra.hashCode;
+      final requestKey = response.requestOptions.extra.toString().hashCode;
       final metric = _map[requestKey];
       metric?.setResponse(response, responseContentLengthMethod);
       await metric?.stop();
@@ -59,7 +59,7 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
   @override
   Future onError(DioError err, ErrorInterceptorHandler handler) async {
     try {
-      final requestKey = err.requestOptions.extra.hashCode;
+      final requestKey = err.requestOptions.extra.toString().hashCode;
       final metric = _map[requestKey];
       metric?.setResponse(err.response, responseContentLengthMethod);
       await metric?.stop();
