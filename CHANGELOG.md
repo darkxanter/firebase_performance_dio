@@ -1,3 +1,13 @@
+# [0.6.0]
+
+### Breaking changes
+
+- The request key generation method has changed from calculating based on a `RequestOptions.extra` hash code to using a unique generated key.
+
+### Other changes
+
+- Update dependency constraints to sdk: '>=2.17.0 <4.0.0'
+
 # [0.5.0]
 
 - Update to dio 5.0.0

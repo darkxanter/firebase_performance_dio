@@ -2,9 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 
 /// [Dio] client interceptor that hooks into request/response process
-/// and calls Firebase Metric API in between. The request key is calculated
-/// based upon [extra] field hash code which appears to be the same across
-/// [onRequest], [onResponse] and [onError] calls.
+/// and calls Firebase Metric API in between. The request key is a unique generated key
+/// stored in [RequestOptions.extra] field.
 ///
 /// Additionally there is no good API of obtaining content length from interceptor
 /// API so we're "approximating" the byte length based on headers & request data.
@@ -18,21 +17,24 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
     this.responseContentLengthMethod = defaultResponseContentLength,
   });
 
-  /// key: requestKey hash code, value: ongoing metric
-  final _map = <int, HttpMetric>{};
+  /// key: requestKey unique key, value: ongoing metric
+  final _map = <_UniqueKey, HttpMetric>{};
   final RequestContentLengthMethod requestContentLengthMethod;
   final ResponseContentLengthMethod responseContentLengthMethod;
+  late final extraKey = runtimeType.toString();
 
   @override
   Future onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) async {
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     try {
       final metric = FirebasePerformance.instance.newHttpMetric(
         options.uri.normalized(),
         options.method.asHttpMethod()!,
       );
-
-      final requestKey = options.extra.hashCode;
+      final requestKey = _UniqueKey();
+      options.extra[extraKey] = requestKey;
       _map[requestKey] = metric;
       final requestContentLength = requestContentLengthMethod(options);
       await metric.start();
@@ -45,27 +47,32 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
 
   @override
   Future onResponse(
-      Response response, ResponseInterceptorHandler handler) async {
-    try {
-      final requestKey = response.requestOptions.extra.hashCode;
-      final metric = _map[requestKey];
-      metric?.setResponse(response, responseContentLengthMethod);
-      await metric?.stop();
-      _map.remove(requestKey);
-    } catch (_) {}
+    Response response,
+    ResponseInterceptorHandler handler,
+  ) async {
+    await _stopMetric(response, response.requestOptions);
     return super.onResponse(response, handler);
   }
 
   @override
-  Future onError(DioError err, ErrorInterceptorHandler handler) async {
-    try {
-      final requestKey = err.requestOptions.extra.hashCode;
-      final metric = _map[requestKey];
-      metric?.setResponse(err.response, responseContentLengthMethod);
-      await metric?.stop();
-      _map.remove(requestKey);
-    } catch (_) {}
+  Future onError(
+    DioError err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    await _stopMetric(err.response, err.requestOptions);
     return super.onError(err, handler);
+  }
+
+  Future<void> _stopMetric(Response? response, RequestOptions options) async {
+    try {
+      final requestKey = options.extra[extraKey];
+      if (requestKey is _UniqueKey) {
+        final metric = _map[requestKey];
+        metric?.setResponse(response, responseContentLengthMethod);
+        await metric?.stop();
+        _map.remove(requestKey);
+      }
+    } catch (_) {}
   }
 }
 
@@ -94,8 +101,10 @@ int? defaultResponseContentLength(Response response) {
 }
 
 extension _ResponseHttpMetric on HttpMetric {
-  void setResponse(Response? value,
-      ResponseContentLengthMethod responseContentLengthMethod) {
+  void setResponse(
+    Response? value,
+    ResponseContentLengthMethod responseContentLengthMethod,
+  ) {
     if (value == null) {
       return;
     }
@@ -138,4 +147,17 @@ extension _StringHttpMethod on String {
         return null;
     }
   }
+}
+
+class _UniqueKey {
+  /// Creates a key that is equal only to itself.
+  ///
+  /// The key cannot be created with a const constructor because that implies
+  /// that all instantiated keys would be the same instance and therefore not
+  /// be unique.
+  // ignore: prefer_const_constructors_in_immutables never use const for this class
+  _UniqueKey();
+
+  @override
+  String toString() => '[#${hashCode.toRadixString(16).padLeft(5, '0')}]';
 }
