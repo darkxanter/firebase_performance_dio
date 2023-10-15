@@ -2,7 +2,7 @@
 
 ### Breaking changes
 
-- The request key generation method has changed from calculating based on a `RequestOptions.extra` hash code to using a unique generated key.
+- Removed the use of request key calculation based on the `RequestOptions.extra` hash code. `HttpMetric` is now stored directly in the `RequestOptions.extra` field.
 
 ### Other changes
 

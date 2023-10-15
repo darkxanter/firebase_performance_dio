@@ -2,8 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 
 /// [Dio] client interceptor that hooks into request/response process
-/// and calls Firebase Metric API in between. The request key is a unique generated key
-/// stored in [RequestOptions.extra] field.
+/// and calls Firebase Metric API in between. The [HttpMetric] stored in [RequestOptions.extra] field.
 ///
 /// Additionally there is no good API of obtaining content length from interceptor
 /// API so we're "approximating" the byte length based on headers & request data.
@@ -16,12 +15,9 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
     this.requestContentLengthMethod = defaultRequestContentLength,
     this.responseContentLengthMethod = defaultResponseContentLength,
   });
-
-  /// key: requestKey unique key, value: ongoing metric
-  final _map = <_UniqueKey, HttpMetric>{};
   final RequestContentLengthMethod requestContentLengthMethod;
   final ResponseContentLengthMethod responseContentLengthMethod;
-  late final extraKey = runtimeType.toString();
+  static const extraKey = 'DioFirebasePerformanceInterceptor';
 
   @override
   Future onRequest(
@@ -33,9 +29,7 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
         options.uri.normalized(),
         options.method.asHttpMethod()!,
       );
-      final requestKey = _UniqueKey();
-      options.extra[extraKey] = requestKey;
-      _map[requestKey] = metric;
+      options.extra[extraKey] = metric;
       final requestContentLength = requestContentLengthMethod(options);
       await metric.start();
       if (requestContentLength != null) {
@@ -65,12 +59,11 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
 
   Future<void> _stopMetric(Response? response, RequestOptions options) async {
     try {
-      final requestKey = options.extra[extraKey];
-      if (requestKey is _UniqueKey) {
-        final metric = _map[requestKey];
-        metric?.setResponse(response, responseContentLengthMethod);
-        await metric?.stop();
-        _map.remove(requestKey);
+      final metric = options.extra[extraKey];
+      if (metric is HttpMetric) {
+        options.extra.remove(extraKey);
+        metric.setResponse(response, responseContentLengthMethod);
+        await metric.stop();
       }
     } catch (_) {}
   }
@@ -147,17 +140,4 @@ extension _StringHttpMethod on String {
         return null;
     }
   }
-}
-
-class _UniqueKey {
-  /// Creates a key that is equal only to itself.
-  ///
-  /// The key cannot be created with a const constructor because that implies
-  /// that all instantiated keys would be the same instance and therefore not
-  /// be unique.
-  // ignore: prefer_const_constructors_in_immutables never use const for this class
-  _UniqueKey();
-
-  @override
-  String toString() => '[#${hashCode.toRadixString(16).padLeft(5, '0')}]';
 }
