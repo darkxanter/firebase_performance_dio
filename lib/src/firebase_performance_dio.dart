@@ -2,9 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 
 /// [Dio] client interceptor that hooks into request/response process
-/// and calls Firebase Metric API in between. The request key is calculated
-/// based upon [extra] field hash code which appears to be the same across
-/// [onRequest], [onResponse] and [onError] calls.
+/// and calls Firebase Metric API in between. The [HttpMetric] stored in [RequestOptions.extra] field.
 ///
 /// Additionally there is no good API of obtaining content length from interceptor
 /// API so we're "approximating" the byte length based on headers & request data.
@@ -17,23 +15,21 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
     this.requestContentLengthMethod = defaultRequestContentLength,
     this.responseContentLengthMethod = defaultResponseContentLength,
   });
-
-  /// key: requestKey hash code, value: ongoing metric
-  final _map = <int, HttpMetric>{};
   final RequestContentLengthMethod requestContentLengthMethod;
   final ResponseContentLengthMethod responseContentLengthMethod;
+  static const extraKey = 'DioFirebasePerformanceInterceptor';
 
   @override
   Future onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) async {
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     try {
       final metric = FirebasePerformance.instance.newHttpMetric(
         options.uri.normalized(),
         options.method.asHttpMethod()!,
       );
-
-      final requestKey = options.extra.hashCode;
-      _map[requestKey] = metric;
+      options.extra[extraKey] = metric;
       final requestContentLength = requestContentLengthMethod(options);
       await metric.start();
       if (requestContentLength != null) {
@@ -45,27 +41,31 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
 
   @override
   Future onResponse(
-      Response response, ResponseInterceptorHandler handler) async {
-    try {
-      final requestKey = response.requestOptions.extra.hashCode;
-      final metric = _map[requestKey];
-      metric?.setResponse(response, responseContentLengthMethod);
-      await metric?.stop();
-      _map.remove(requestKey);
-    } catch (_) {}
+    Response response,
+    ResponseInterceptorHandler handler,
+  ) async {
+    await _stopMetric(response, response.requestOptions);
     return super.onResponse(response, handler);
   }
 
   @override
-  Future onError(DioError err, ErrorInterceptorHandler handler) async {
-    try {
-      final requestKey = err.requestOptions.extra.hashCode;
-      final metric = _map[requestKey];
-      metric?.setResponse(err.response, responseContentLengthMethod);
-      await metric?.stop();
-      _map.remove(requestKey);
-    } catch (_) {}
+  Future onError(
+    DioError err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    await _stopMetric(err.response, err.requestOptions);
     return super.onError(err, handler);
+  }
+
+  Future<void> _stopMetric(Response? response, RequestOptions options) async {
+    try {
+      final metric = options.extra[extraKey];
+      if (metric is HttpMetric) {
+        options.extra.remove(extraKey);
+        metric.setResponse(response, responseContentLengthMethod);
+        await metric.stop();
+      }
+    } catch (_) {}
   }
 }
 
@@ -94,8 +94,10 @@ int? defaultResponseContentLength(Response response) {
 }
 
 extension _ResponseHttpMetric on HttpMetric {
-  void setResponse(Response? value,
-      ResponseContentLengthMethod responseContentLengthMethod) {
+  void setResponse(
+    Response? value,
+    ResponseContentLengthMethod responseContentLengthMethod,
+  ) {
     if (value == null) {
       return;
     }

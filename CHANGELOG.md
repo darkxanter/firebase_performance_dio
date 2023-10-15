@@ -1,3 +1,13 @@
+# [0.6.0]
+
+### Breaking changes
+
+- Removed the use of request key calculation based on the `RequestOptions.extra` hash code. `HttpMetric` is now stored directly in the `RequestOptions.extra` field.
+
+### Other changes
+
+- Update dependency constraints to sdk: '>=2.17.0 <4.0.0'
+
 # [0.5.0]
 
 - Update to dio 5.0.0
