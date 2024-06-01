@@ -14,9 +14,11 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
   DioFirebasePerformanceInterceptor({
     this.requestContentLengthMethod = defaultRequestContentLength,
     this.responseContentLengthMethod = defaultResponseContentLength,
+    this.requestUrlBuilder = defaultRequestUrl,
   });
   final RequestContentLengthMethod requestContentLengthMethod;
   final ResponseContentLengthMethod responseContentLengthMethod;
+  final RequestUrlBuilder requestUrlBuilder;
   static const extraKey = 'DioFirebasePerformanceInterceptor';
 
   @override
@@ -26,7 +28,7 @@ class DioFirebasePerformanceInterceptor extends Interceptor {
   ) async {
     try {
       final metric = FirebasePerformance.instance.newHttpMetric(
-        options.uri.normalized(),
+        requestUrlBuilder(options),
         options.method.asHttpMethod()!,
       );
       options.extra[extraKey] = metric;
@@ -113,6 +115,11 @@ extension _ResponseHttpMetric on HttpMetric {
       httpResponseCode = value.statusCode;
     }
   }
+}
+
+typedef RequestUrlBuilder = String Function(RequestOptions options);
+String defaultRequestUrl(RequestOptions options) {
+  return options.uri.normalized();
 }
 
 extension _UriHttpMethod on Uri {

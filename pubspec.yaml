@@ -1,6 +1,6 @@
 name: firebase_performance_dio
 description: Dio Firebase performance monitoring.
-version: 0.6.0
+version: 0.7.0
 homepage: https://github.com/darkxanter/firebase_performance_dio
 
 environment:

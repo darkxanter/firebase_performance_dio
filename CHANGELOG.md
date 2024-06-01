@@ -1,3 +1,7 @@
+# [0.7.0]
+
+- added request url builder
+
 # [0.6.0]
 
 ### Breaking changes
