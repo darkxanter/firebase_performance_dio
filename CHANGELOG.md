@@ -1,3 +1,7 @@
+# [0.7.1]
+
+- Update firebase_performance dependency constraints: '>=0.8.0 <1.0.0'
+
 # [0.7.0]
 
 - added request url builder
